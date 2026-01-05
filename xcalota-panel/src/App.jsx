@@ -13,11 +13,7 @@ function slugify(text) {
     .replace(/(^-|-$)+/g, "");
 }
 
-function Badge({ children, tone = "neutral" }) {
-  return <span className={`badge badge--${tone}`}>{children}</span>;
-}
-
-function Modal({ open, title, children, onClose }) {
+function Modal({ open, title, subtitle, children, onClose }) {
   if (!open) return null;
   return (
     <div className="modalOverlay" role="dialog" aria-modal="true">
@@ -25,7 +21,7 @@ function Modal({ open, title, children, onClose }) {
         <div className="modalHeader">
           <div>
             <div className="modalTitle">{title}</div>
-            <div className="modalHint">Preencha os dados e crie em 1 clique.</div>
+            {subtitle && <div className="modalSub">{subtitle}</div>}
           </div>
           <button className="iconBtn" onClick={onClose} aria-label="Fechar">
             ✕
@@ -37,18 +33,92 @@ function Modal({ open, title, children, onClose }) {
   );
 }
 
+function Step({ n, title, desc, active, done }) {
+  return (
+    <div className={`step ${active ? "step--active" : ""} ${done ? "step--done" : ""}`}>
+      <div className="stepNum">{done ? "✓" : n}</div>
+      <div>
+        <div className="stepTitle">{title}</div>
+        <div className="stepDesc">{desc}</div>
+      </div>
+    </div>
+  );
+}
+
+function Toast({ toast }) {
+  if (!toast) return null;
+  return (
+    <div className={`toast toast--${toast.type}`}>
+      <div className="toastDot" />
+      <div className="toastMsg">{toast.message}</div>
+    </div>
+  );
+}
+
+/**
+ * "Login" simples (mock) só pra ficar familiar e guiado.
+ * Depois você troca por auth real no backend.
+ */
+function loadAccount() {
+  try {
+    return JSON.parse(localStorage.getItem("xcalota_account") || "null");
+  } catch {
+    return null;
+  }
+}
+function saveAccount(acc) {
+  localStorage.setItem("xcalota_account", JSON.stringify(acc));
+}
+
 export default function App() {
+  // onboarding
+  const [account, setAccount] = useState(loadAccount());
+
+  // dados
   const [restaurants, setRestaurants] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
-  const [errorList, setErrorList] = useState("");
 
-  const [openCreate, setOpenCreate] = useState(false);
+  // ui
+  const [q, setQ] = useState("");
+  const [toast, setToast] = useState(null);
+  const [openAccount, setOpenAccount] = useState(false);
+  const [openRestaurant, setOpenRestaurant] = useState(false);
+
+  // account form
+  const [accName, setAccName] = useState(account?.name || "");
+  const [accEmail, setAccEmail] = useState(account?.email || "");
+  const [accPass, setAccPass] = useState("");
+
+  // restaurant form
   const [nome, setNome] = useState("");
   const [slug, setSlug] = useState("");
   const [creating, setCreating] = useState(false);
-  const [toast, setToast] = useState(null);
 
-  const [q, setQ] = useState("");
+  // load list (best effort)
+  async function fetchRestaurants() {
+    setLoadingList(true);
+    try {
+      const res = await fetch(`${API}/restaurants`);
+      if (!res.ok) throw new Error("no-get");
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.items || data.data || []);
+      setRestaurants(list);
+    } catch {
+      // se não tiver GET ainda, só mostra vazio (sem tecnês)
+      setRestaurants([]);
+    } finally {
+      setLoadingList(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchRestaurants();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!slug) setSlug(slugify(nome));
+  }, [nome]); // não depende de slug
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -66,41 +136,32 @@ export default function App() {
     showToast._t = window.setTimeout(() => setToast(null), 3200);
   }
 
-  async function fetchRestaurants() {
-    setLoadingList(true);
-    setErrorList("");
-    try {
-      const res = await fetch(`${API}/restaurants`);
-      if (!res.ok) throw new Error(`Falha ao listar (HTTP ${res.status})`);
-      const data = await res.json();
+  // steps
+  const step1Done = !!account;
+  const step2Done = restaurants.length > 0; // quando houver GET, isso fica real
+  const step1Active = !step1Done;
+  const step2Active = step1Done && !step2Done;
+  const step3Active = step1Done && (step2Done || restaurants.length >= 0);
 
-      // aceita formatos comuns: array direto ou { items: [] }
-      const list = Array.isArray(data) ? data : (data.items || data.data || []);
-      setRestaurants(list);
-    } catch (e) {
-      setErrorList(
-        "Não consegui carregar a lista de restaurantes. Verifique se existe GET /api/restaurants."
-      );
-    } finally {
-      setLoadingList(false);
+  async function handleCreateAccount(e) {
+    e.preventDefault();
+    if (!accName.trim() || !accEmail.trim() || accPass.length < 4) {
+      showToast("error", "Preencha nome, e-mail e uma senha (mín. 4 caracteres).");
+      return;
     }
+    const newAcc = { name: accName.trim(), email: accEmail.trim() };
+    saveAccount(newAcc);
+    setAccount(newAcc);
+    setOpenAccount(false);
+    showToast("success", "Conta criada! Agora vamos cadastrar seu restaurante.");
+    setOpenRestaurant(true);
   }
 
-  useEffect(() => {
-    fetchRestaurants();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    // auto sugerir slug a partir do nome (sem forçar)
-    if (!slug) setSlug(slugify(nome));
-  }, [nome]); // intencionalmente não depende de slug
-
-  async function handleCreate(e) {
+  async function handleCreateRestaurant(e) {
     e.preventDefault();
     const payload = { nome: nome.trim(), slug: slugify(slug || nome) };
     if (!payload.nome || !payload.slug) {
-      showToast("error", "Preencha nome e slug.");
+      showToast("error", "Preencha o nome do restaurante.");
       return;
     }
 
@@ -111,17 +172,24 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) throw new Error("create-fail");
 
-      if (!res.ok) throw new Error(`Falha ao criar (HTTP ${res.status})`);
-
-      showToast("success", "Restaurante criado com sucesso!");
-      setOpenCreate(false);
+      showToast("success", "Restaurante cadastrado com sucesso!");
+      setOpenRestaurant(false);
       setNome("");
       setSlug("");
 
+      // tenta atualizar a lista (se existir GET)
       await fetchRestaurants();
-    } catch (e) {
-      showToast("error", "Erro ao criar restaurante. Verifique os dados.");
+
+      // fallback: se ainda não existe GET, mantém uma lista local amigável
+      // (só pra UX não parecer quebrada)
+      setRestaurants((prev) => {
+        if (prev.length === 0) return [{ ...payload, id: payload.slug }];
+        return prev;
+      });
+    } catch {
+      showToast("error", "Não consegui cadastrar agora. Tente novamente em instantes.");
     } finally {
       setCreating(false);
     }
@@ -132,19 +200,31 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <div className="logo">🍕</div>
-          <div className="brandText">
+          <div>
             <div className="brandName">Xcalota</div>
-            <div className="brandSub">Painel de Restaurantes</div>
+            <div className="brandSub">Cadastro rápido do seu restaurante</div>
           </div>
-          <Badge tone="success">API: {API.replace("http://", "").replace("https://", "")}</Badge>
         </div>
 
-        <div className="topbarActions">
-          <button className="btn btn--ghost" onClick={() => fetchRestaurants()}>
-            Atualizar
-          </button>
-          <button className="btn btn--primary" onClick={() => setOpenCreate(true)}>
-            + Novo restaurante
+        <div className="topActions">
+          {account ? (
+            <div className="userChip" title={account.email}>
+              <span className="userDot" />
+              <span className="userName">{account.name}</span>
+            </div>
+          ) : (
+            <button className="btn btn--primary" onClick={() => setOpenAccount(true)}>
+              Criar minha conta
+            </button>
+          )}
+
+          <button
+            className="btn btn--ghost"
+            onClick={() => setOpenRestaurant(true)}
+            disabled={!account}
+            title={!account ? "Crie sua conta primeiro" : "Cadastrar restaurante"}
+          >
+            + Cadastrar restaurante
           </button>
         </div>
       </header>
@@ -152,61 +232,90 @@ export default function App() {
       <main className="container">
         <section className="hero">
           <div className="heroLeft">
-            <h1>Organize seus restaurantes com cara de produto.</h1>
+            <div className="kicker">Bem-vindo 👋</div>
+            <h1>Vamos colocar seu restaurante no ar em poucos passos.</h1>
             <p>
-              Listagem clara, criação rápida e base pronta para evoluir com cardápio público,
-              integrações e automações.
+              Sem complicação. Você cria sua conta, cadastra o restaurante e depois adiciona cardápio e WhatsApp.
             </p>
 
-            <div className="searchRow">
-              <div className="searchBox">
-                <span className="searchIcon">⌕</span>
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Buscar por nome ou slug…"
-                />
-              </div>
-              <div className="miniStats">
-                <div className="stat">
-                  <div className="statLabel">Total</div>
-                  <div className="statValue">{restaurants.length}</div>
-                </div>
-                <div className="stat">
-                  <div className="statLabel">Exibindo</div>
-                  <div className="statValue">{filtered.length}</div>
-                </div>
-              </div>
+            <div className="steps">
+              <Step
+                n="1"
+                title="Crie sua conta"
+                desc="Nome, e-mail e senha. Só para organizar seus dados."
+                active={step1Active}
+                done={step1Done}
+              />
+              <Step
+                n="2"
+                title="Cadastre seu restaurante"
+                desc="Nome do restaurante e pronto. O sistema gera o link automático."
+                active={step2Active}
+                done={step2Done}
+              />
+              <Step
+                n="3"
+                title="Próximo: cardápio e WhatsApp"
+                desc="Você adiciona itens, fotos e um botão de pedido no WhatsApp."
+                active={step3Active}
+                done={false}
+              />
+            </div>
+
+            <div className="ctaRow">
+              {!account ? (
+                <button className="btn btn--primary btn--lg" onClick={() => setOpenAccount(true)}>
+                  Começar agora
+                </button>
+              ) : (
+                <button className="btn btn--primary btn--lg" onClick={() => setOpenRestaurant(true)}>
+                  Cadastrar meu restaurante
+                </button>
+              )}
+
+              <button
+                className="btn btn--ghost btn--lg"
+                onClick={() => showToast("info", "Em breve: tutorial com imagens e vídeos curtos.")}
+              >
+                Ver como funciona
+              </button>
             </div>
           </div>
 
           <div className="heroRight">
-            <div className="previewCard">
-              <div className="previewTitle">Próxima etapa</div>
-              <div className="previewText">
-                Publicar uma página por restaurante:
-                <span className="mono"> /r/:slug</span>
-              </div>
-              <div className="previewText subtle">
-                Ex.: <span className="mono">/r/maria-acai</span> com botão WhatsApp e cardápio.
-              </div>
-              <div className="previewActions">
-                <button className="btn btn--ghost" onClick={() => showToast("info", "Em breve: páginas públicas por slug.")}>
-                  Ver roadmap
-                </button>
-                <button className="btn btn--primary" onClick={() => setOpenCreate(true)}>
-                  Criar agora
-                </button>
+            <div className="preview">
+              <div className="previewTitle">Exemplo de resultado</div>
+              <div className="previewCard">
+                <div className="previewBadge">Página do restaurante</div>
+                <div className="previewH">/r/seu-restaurante</div>
+                <div className="previewP">Cardápio • Fotos • Botão WhatsApp</div>
+                <div className="previewMini">
+                  “Fica bonito no celular e passa confiança para o cliente.”
+                </div>
               </div>
             </div>
           </div>
         </section>
 
         <section className="panel">
-          <div className="panelHeader">
+          <div className="panelTop">
             <div>
-              <h2>Restaurantes</h2>
-              <div className="panelHint">Clique em “Gerenciar” para evoluirmos a próxima tela.</div>
+              <h2>Seus restaurantes</h2>
+              <div className="hint">
+                {account
+                  ? "Aqui você vê e gerencia tudo. Comece cadastrando seu restaurante."
+                  : "Crie sua conta para começar a cadastrar seus restaurantes."}
+              </div>
+            </div>
+
+            <div className="searchBox">
+              <span className="searchIcon">🔎</span>
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar por nome…"
+                disabled={restaurants.length === 0}
+              />
             </div>
           </div>
 
@@ -216,65 +325,60 @@ export default function App() {
                 <div key={i} className="skeletonCard" />
               ))}
             </div>
-          ) : errorList ? (
-            <div className="emptyState error">
-              <div className="emptyIcon">⚠️</div>
-              <div className="emptyTitle">Falha ao carregar</div>
-              <div className="emptyText">{errorList}</div>
-              <button className="btn btn--primary" onClick={() => fetchRestaurants()}>
-                Tentar novamente
-              </button>
-            </div>
           ) : filtered.length === 0 ? (
-            <div className="emptyState">
-              <div className="emptyIcon">🗂️</div>
-              <div className="emptyTitle">Nenhum restaurante encontrado</div>
-              <div className="emptyText">
-                {restaurants.length === 0
-                  ? "Crie o primeiro restaurante para começar."
-                  : "Tente buscar por outro termo."}
+            <div className="empty">
+              <div className="emptyIcon">🏪</div>
+              <div className="emptyTitle">
+                {account ? "Nenhum restaurante cadastrado ainda" : "Crie sua conta para começar"}
               </div>
-              <button className="btn btn--primary" onClick={() => setOpenCreate(true)}>
-                + Criar restaurante
-              </button>
+              <div className="emptyText">
+                {account
+                  ? "Clique no botão abaixo e cadastre o seu primeiro restaurante. Leva menos de 1 minuto."
+                  : "É rápido e você já começa com tudo organizado."}
+              </div>
+
+              <div className="emptyActions">
+                {!account ? (
+                  <button className="btn btn--primary btn--lg" onClick={() => setOpenAccount(true)}>
+                    Criar minha conta
+                  </button>
+                ) : (
+                  <button className="btn btn--primary btn--lg" onClick={() => setOpenRestaurant(true)}>
+                    Cadastrar meu restaurante
+                  </button>
+                )}
+                <button
+                  className="btn btn--ghost btn--lg"
+                  onClick={() => showToast("info", "Em breve: suporte via WhatsApp e onboarding guiado.")}
+                >
+                  Falar com suporte
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid">
               {filtered.map((r) => {
                 const name = r.nome || r.name || "Sem nome";
                 const s = r.slug || "";
-                const id = r.id || r._id || s;
+                const id = r.id || r._id || s || name;
 
                 return (
                   <div key={id} className="card">
-                    <div className="cardTop">
-                      <div className="cardTitle">{name}</div>
-                      <Badge>{s || "sem-slug"}</Badge>
-                    </div>
-
-                    <div className="cardBody">
-                      <div className="row">
-                        <div className="rowLabel">URL futura</div>
-                        <div className="rowValue mono">/r/{s || "seu-slug"}</div>
-                      </div>
-                      <div className="row">
-                        <div className="rowLabel">Status</div>
-                        <div className="rowValue">
-                          <Badge tone="info">Ativo</Badge>
-                        </div>
-                      </div>
+                    <div className="cardTitle">{name}</div>
+                    <div className="cardSub">
+                      Link: <span className="mono">/r/{s || "seu-restaurante"}</span>
                     </div>
 
                     <div className="cardActions">
                       <button
                         className="btn btn--ghost"
-                        onClick={() => showToast("info", "Em breve: editar e configurar cardápio.")}
+                        onClick={() => showToast("info", "Em breve: editar dados do restaurante.")}
                       >
                         Editar
                       </button>
                       <button
                         className="btn btn--primary"
-                        onClick={() => showToast("info", `Próximo passo: tela de gestão do "${name}".`)}
+                        onClick={() => showToast("info", "Próximo passo: tela de cardápio e WhatsApp.")}
                       >
                         Gerenciar
                       </button>
@@ -287,47 +391,70 @@ export default function App() {
         </section>
       </main>
 
-      <Modal open={openCreate} title="Novo restaurante" onClose={() => !creating && setOpenCreate(false)}>
-        <form onSubmit={handleCreate} className="form">
+      {/* Modal conta */}
+      <Modal
+        open={openAccount}
+        title="Criar minha conta"
+        subtitle="Só para organizar seus restaurantes. É rápido."
+        onClose={() => setOpenAccount(false)}
+      >
+        <form className="form" onSubmit={handleCreateAccount}>
           <label className="field">
-            <span>Nome</span>
-            <input
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              placeholder="Ex.: Maria Açaí"
-              autoFocus
-            />
+            <span>Seu nome</span>
+            <input value={accName} onChange={(e) => setAccName(e.target.value)} placeholder="Ex.: Maria" autoFocus />
           </label>
-
           <label className="field">
-            <span>Slug</span>
-            <input
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              placeholder="Ex.: maria-acai"
-            />
-            <div className="fieldHint">
-              Dica: deixe vazio que eu gero automaticamente a partir do nome.
-            </div>
+            <span>E-mail</span>
+            <input value={accEmail} onChange={(e) => setAccEmail(e.target.value)} placeholder="Ex.: maria@email.com" />
+          </label>
+          <label className="field">
+            <span>Senha</span>
+            <input value={accPass} onChange={(e) => setAccPass(e.target.value)} placeholder="Crie uma senha" type="password" />
+            <div className="fieldHint">Depois você pode trocar e recuperar pelo e-mail (quando ativarmos o login real).</div>
           </label>
 
           <div className="formActions">
-            <button type="button" className="btn btn--ghost" onClick={() => setOpenCreate(false)} disabled={creating}>
+            <button className="btn btn--ghost" type="button" onClick={() => setOpenAccount(false)}>
               Cancelar
             </button>
-            <button type="submit" className="btn btn--primary" disabled={creating}>
-              {creating ? "Criando..." : "Criar restaurante"}
+            <button className="btn btn--primary" type="submit">
+              Criar conta
             </button>
           </div>
         </form>
       </Modal>
 
-      {toast && (
-        <div className={`toast toast--${toast.type}`}>
-          <div className="toastDot" />
-          <div className="toastMsg">{toast.message}</div>
-        </div>
-      )}
+      {/* Modal restaurante */}
+      <Modal
+        open={openRestaurant}
+        title="Cadastrar restaurante"
+        subtitle="Preencha o nome e pronto. O link é gerado automaticamente."
+        onClose={() => !creating && setOpenRestaurant(false)}
+      >
+        <form className="form" onSubmit={handleCreateRestaurant}>
+          <label className="field">
+            <span>Nome do restaurante</span>
+            <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Maria Açaí" autoFocus />
+          </label>
+
+          <label className="field">
+            <span>Link (apelido)</span>
+            <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="Ex.: maria-acai" />
+            <div className="fieldHint">Pode deixar como está. Você pode mudar depois.</div>
+          </label>
+
+          <div className="formActions">
+            <button className="btn btn--ghost" type="button" onClick={() => setOpenRestaurant(false)} disabled={creating}>
+              Cancelar
+            </button>
+            <button className="btn btn--primary" type="submit" disabled={creating}>
+              {creating ? "Salvando..." : "Cadastrar restaurante"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Toast toast={toast} />
     </div>
   );
 }
