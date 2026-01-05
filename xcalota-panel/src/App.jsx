@@ -159,7 +159,7 @@ export default function App() {
 
   async function handleCreateRestaurant(e) {
     e.preventDefault();
-    const payload = { nome: nome.trim(), slug: slugify(slug || nome) };
+    const payload = { name: nome.trim(), slug: slugify(slug || nome) };
     if (!payload.nome || !payload.slug) {
       showToast("error", "Preencha o nome do restaurante.");
       return;
@@ -358,7 +358,7 @@ export default function App() {
           ) : (
             <div className="grid">
               {filtered.map((r) => {
-                const name = r.nome || r.name || "Sem nome";
+                const name = r.name || r.nome || "Sem nome";
                 const s = r.slug || "";
                 const id = r.id || r._id || s || name;
 
