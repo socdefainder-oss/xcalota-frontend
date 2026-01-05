@@ -1,231 +1,333 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
-/* =====================================================
-   FORMULÁRIO DE CRIAÇÃO DE RESTAURANTE
-   ===================================================== */
-function CreateRestaurantForm() {
-  const [nome, setNome] = useState("");
-  const [slug, setSlug] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState("");
+const API = import.meta.env.VITE_API_URL || "http://3.138.190.230/api";
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setMsg("");
-
-    try {
-      const res = await fetch("http://3.138.190.230/api/restaurants", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ nome, slug }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Erro ao criar restaurante");
-      }
-
-      setMsg("✅ Restaurante criado com sucesso!");
-      setNome("");
-      setSlug("");
-    } catch (err) {
-      setMsg("❌ Erro ao criar restaurante. Verifique os dados.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      style={{
-        maxWidth: 420,
-        margin: "30px auto",
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-      }}
-    >
-      <input
-        placeholder="Nome do restaurante"
-        value={nome}
-        onChange={(e) => setNome(e.target.value)}
-        required
-      />
-
-      <input
-        placeholder="Slug (ex: pizzaria-do-joao)"
-        value={slug}
-        onChange={(e) => setSlug(e.target.value)}
-        required
-      />
-
-      <button type="submit" disabled={loading}>
-        {loading ? "Criando..." : "Criar restaurante"}
-      </button>
-
-      {msg && <p style={{ textAlign: "center" }}>{msg}</p>}
-    </form>
-  );
+function slugify(text) {
+  return String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
 }
 
-/* =====================================================
-   APP
-   ===================================================== */
-function App() {
-  const scrollToForm = () => {
-    const el = document.getElementById("form-criar-restaurante");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
-  };
+function Badge({ children, tone = "neutral" }) {
+  return <span className={`badge badge--${tone}`}>{children}</span>;
+}
 
+function Modal({ open, title, children, onClose }) {
+  if (!open) return null;
   return (
-    <div style={{ fontFamily: "Arial, sans-serif", lineHeight: 1.6 }}>
-
-      {/* ================= HERO ================= */}
-      <section style={{ padding: "80px 20px", textAlign: "center" }}>
-        <h1>Xcalota — Sistema simples e inteligente para restaurantes e delivery</h1>
-
-        <p style={{ maxWidth: 800, margin: "20px auto" }}>
-          Centralize pedidos, cardápio e operação em um único painel.
-          Menos confusão no atendimento. Mais controle no dia a dia.
-          Mais vendas no final do mês.
-        </p>
-
-        <p style={{ maxWidth: 700, margin: "0 auto 30px" }}>
-          O Xcalota foi criado para quem precisa trabalhar rápido,
-          sem sistemas complicados e sem depender de TI.
-        </p>
-
-        <button onClick={scrollToForm} style={{ marginRight: 10 }}>
-          Criar meu restaurante grátis
-        </button>
-
-        <button>Ver demonstração</button>
-      </section>
-
-      {/* ================= POSICIONAMENTO ================= */}
-      <section style={{ padding: "40px 20px", textAlign: "center", background: "#fafafa" }}>
-        <p style={{ maxWidth: 800, margin: "0 auto 10px" }}>
-          Plataforma em crescimento, desenvolvida para restaurantes que querem
-          organizar a operação e evoluir com segurança.
-        </p>
-
-        <p style={{ maxWidth: 800, margin: "0 auto" }}>
-          O Xcalota faz parte de um ecossistema tecnológico pensado para
-          simplificar a gestão, reduzir erros operacionais e preparar
-          seu negócio para crescer no digital.
-        </p>
-      </section>
-
-      {/* ================= SEGMENTOS ================= */}
-      <section style={{ padding: "60px 20px" }}>
-        <h2 style={{ textAlign: "center" }}>O Xcalota é para você que...</h2>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 20,
-            justifyContent: "center",
-            flexWrap: "wrap",
-            marginTop: 30,
-          }}
-        >
-          <div style={{ maxWidth: 300 }}>
-            <h3>🍽️ Restaurantes</h3>
-            <p>
-              Atendimento em balcão, retirada ou consumo no local.
-              Organize pedidos e mantenha o fluxo funcionando.
-            </p>
+    <div className="modalOverlay" role="dialog" aria-modal="true">
+      <div className="modalCard">
+        <div className="modalHeader">
+          <div>
+            <div className="modalTitle">{title}</div>
+            <div className="modalHint">Preencha os dados e crie em 1 clique.</div>
           </div>
-
-          <div style={{ maxWidth: 300 }}>
-            <h3>🛵 Delivery</h3>
-            <p>
-              Centralize pedidos, reduza erros e ganhe velocidade
-              no atendimento do seu delivery.
-            </p>
-          </div>
-
-          <div style={{ maxWidth: 300 }}>
-            <h3>🏪 Operações Digitais</h3>
-            <p>
-              Para quem tem mais de uma operação ou pensa em escalar.
-              Base organizada e pronta para crescer.
-            </p>
-          </div>
+          <button className="iconBtn" onClick={onClose} aria-label="Fechar">
+            ✕
+          </button>
         </div>
-      </section>
-
-      {/* ================= FUNCIONALIDADES ================= */}
-      <section style={{ padding: "60px 20px", background: "#fafafa" }}>
-        <h2 style={{ textAlign: "center" }}>Soluções para o seu dia a dia</h2>
-
-        <div style={{ maxWidth: 900, margin: "30px auto" }}>
-          <h3>📊 Para a gestão</h3>
-          <p>
-            Tenha clareza sobre o que está acontecendo na sua operação,
-            sem depender de planilhas ou controles improvisados.
-          </p>
-
-          <h3>⚙️ Para a operação</h3>
-          <p>
-            Menos etapas, menos erro e mais agilidade no atendimento.
-            Tudo pensado para o ritmo real de um restaurante.
-          </p>
-
-          <h3>📱 Para o dia a dia</h3>
-          <p>
-            Interface leve, prática e direta, funcionando no navegador,
-            sem complicação.
-          </p>
-        </div>
-      </section>
-
-      {/* ================= CTA ================= */}
-      <section style={{ padding: "60px 20px", textAlign: "center" }}>
-        <h2>Pronto para organizar sua operação?</h2>
-        <button onClick={scrollToForm}>
-          Criar meu restaurante agora
-        </button>
-      </section>
-
-      {/* ================= FORMULÁRIO ================= */}
-      <section
-        id="form-criar-restaurante"
-        style={{ padding: "80px 20px", background: "#f5f5f5" }}
-      >
-        <h2 style={{ textAlign: "center" }}>
-          🍕 Criar meu restaurante no Xcalota
-        </h2>
-
-        <CreateRestaurantForm />
-      </section>
-
-      {/* ================= FOOTER ================= */}
-      <footer style={{ padding: "40px 20px", background: "#222", color: "#fff" }}>
-        <div style={{ maxWidth: 900, margin: "0 auto" }}>
-          <strong>Xcalota</strong>
-          <ul>
-            <li>Sobre</li>
-            <li>Como funciona</li>
-            <li>Planos e preços (em breve)</li>
-            <li>Seja parceiro</li>
-          </ul>
-
-          <strong>Sistemas</strong>
-          <ul>
-            <li>Sistema para Restaurantes</li>
-            <li>Sistema para Delivery</li>
-            <li>Sistema para Loja de Açaí</li>
-          </ul>
-        </div>
-      </footer>
-
+        <div className="modalBody">{children}</div>
+      </div>
     </div>
   );
 }
 
-export default App;
+export default function App() {
+  const [restaurants, setRestaurants] = useState([]);
+  const [loadingList, setLoadingList] = useState(true);
+  const [errorList, setErrorList] = useState("");
+
+  const [openCreate, setOpenCreate] = useState(false);
+  const [nome, setNome] = useState("");
+  const [slug, setSlug] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const [q, setQ] = useState("");
+
+  const filtered = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return restaurants;
+    return restaurants.filter((r) => {
+      const n = (r.nome || r.name || "").toLowerCase();
+      const s = (r.slug || "").toLowerCase();
+      return n.includes(query) || s.includes(query);
+    });
+  }, [restaurants, q]);
+
+  function showToast(type, message) {
+    setToast({ type, message });
+    window.clearTimeout(showToast._t);
+    showToast._t = window.setTimeout(() => setToast(null), 3200);
+  }
+
+  async function fetchRestaurants() {
+    setLoadingList(true);
+    setErrorList("");
+    try {
+      const res = await fetch(`${API}/restaurants`);
+      if (!res.ok) throw new Error(`Falha ao listar (HTTP ${res.status})`);
+      const data = await res.json();
+
+      // aceita formatos comuns: array direto ou { items: [] }
+      const list = Array.isArray(data) ? data : (data.items || data.data || []);
+      setRestaurants(list);
+    } catch (e) {
+      setErrorList(
+        "Não consegui carregar a lista de restaurantes. Verifique se existe GET /api/restaurants."
+      );
+    } finally {
+      setLoadingList(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchRestaurants();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // auto sugerir slug a partir do nome (sem forçar)
+    if (!slug) setSlug(slugify(nome));
+  }, [nome]); // intencionalmente não depende de slug
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    const payload = { nome: nome.trim(), slug: slugify(slug || nome) };
+    if (!payload.nome || !payload.slug) {
+      showToast("error", "Preencha nome e slug.");
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const res = await fetch(`${API}/restaurants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error(`Falha ao criar (HTTP ${res.status})`);
+
+      showToast("success", "Restaurante criado com sucesso!");
+      setOpenCreate(false);
+      setNome("");
+      setSlug("");
+
+      await fetchRestaurants();
+    } catch (e) {
+      showToast("error", "Erro ao criar restaurante. Verifique os dados.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="page">
+      <header className="topbar">
+        <div className="brand">
+          <div className="logo">🍕</div>
+          <div className="brandText">
+            <div className="brandName">Xcalota</div>
+            <div className="brandSub">Painel de Restaurantes</div>
+          </div>
+          <Badge tone="success">API: {API.replace("http://", "").replace("https://", "")}</Badge>
+        </div>
+
+        <div className="topbarActions">
+          <button className="btn btn--ghost" onClick={() => fetchRestaurants()}>
+            Atualizar
+          </button>
+          <button className="btn btn--primary" onClick={() => setOpenCreate(true)}>
+            + Novo restaurante
+          </button>
+        </div>
+      </header>
+
+      <main className="container">
+        <section className="hero">
+          <div className="heroLeft">
+            <h1>Organize seus restaurantes com cara de produto.</h1>
+            <p>
+              Listagem clara, criação rápida e base pronta para evoluir com cardápio público,
+              integrações e automações.
+            </p>
+
+            <div className="searchRow">
+              <div className="searchBox">
+                <span className="searchIcon">⌕</span>
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar por nome ou slug…"
+                />
+              </div>
+              <div className="miniStats">
+                <div className="stat">
+                  <div className="statLabel">Total</div>
+                  <div className="statValue">{restaurants.length}</div>
+                </div>
+                <div className="stat">
+                  <div className="statLabel">Exibindo</div>
+                  <div className="statValue">{filtered.length}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="heroRight">
+            <div className="previewCard">
+              <div className="previewTitle">Próxima etapa</div>
+              <div className="previewText">
+                Publicar uma página por restaurante:
+                <span className="mono"> /r/:slug</span>
+              </div>
+              <div className="previewText subtle">
+                Ex.: <span className="mono">/r/maria-acai</span> com botão WhatsApp e cardápio.
+              </div>
+              <div className="previewActions">
+                <button className="btn btn--ghost" onClick={() => showToast("info", "Em breve: páginas públicas por slug.")}>
+                  Ver roadmap
+                </button>
+                <button className="btn btn--primary" onClick={() => setOpenCreate(true)}>
+                  Criar agora
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panelHeader">
+            <div>
+              <h2>Restaurantes</h2>
+              <div className="panelHint">Clique em “Gerenciar” para evoluirmos a próxima tela.</div>
+            </div>
+          </div>
+
+          {loadingList ? (
+            <div className="skeletonGrid">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="skeletonCard" />
+              ))}
+            </div>
+          ) : errorList ? (
+            <div className="emptyState error">
+              <div className="emptyIcon">⚠️</div>
+              <div className="emptyTitle">Falha ao carregar</div>
+              <div className="emptyText">{errorList}</div>
+              <button className="btn btn--primary" onClick={() => fetchRestaurants()}>
+                Tentar novamente
+              </button>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="emptyState">
+              <div className="emptyIcon">🗂️</div>
+              <div className="emptyTitle">Nenhum restaurante encontrado</div>
+              <div className="emptyText">
+                {restaurants.length === 0
+                  ? "Crie o primeiro restaurante para começar."
+                  : "Tente buscar por outro termo."}
+              </div>
+              <button className="btn btn--primary" onClick={() => setOpenCreate(true)}>
+                + Criar restaurante
+              </button>
+            </div>
+          ) : (
+            <div className="grid">
+              {filtered.map((r) => {
+                const name = r.nome || r.name || "Sem nome";
+                const s = r.slug || "";
+                const id = r.id || r._id || s;
+
+                return (
+                  <div key={id} className="card">
+                    <div className="cardTop">
+                      <div className="cardTitle">{name}</div>
+                      <Badge>{s || "sem-slug"}</Badge>
+                    </div>
+
+                    <div className="cardBody">
+                      <div className="row">
+                        <div className="rowLabel">URL futura</div>
+                        <div className="rowValue mono">/r/{s || "seu-slug"}</div>
+                      </div>
+                      <div className="row">
+                        <div className="rowLabel">Status</div>
+                        <div className="rowValue">
+                          <Badge tone="info">Ativo</Badge>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="cardActions">
+                      <button
+                        className="btn btn--ghost"
+                        onClick={() => showToast("info", "Em breve: editar e configurar cardápio.")}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        className="btn btn--primary"
+                        onClick={() => showToast("info", `Próximo passo: tela de gestão do "${name}".`)}
+                      >
+                        Gerenciar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </main>
+
+      <Modal open={openCreate} title="Novo restaurante" onClose={() => !creating && setOpenCreate(false)}>
+        <form onSubmit={handleCreate} className="form">
+          <label className="field">
+            <span>Nome</span>
+            <input
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Ex.: Maria Açaí"
+              autoFocus
+            />
+          </label>
+
+          <label className="field">
+            <span>Slug</span>
+            <input
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              placeholder="Ex.: maria-acai"
+            />
+            <div className="fieldHint">
+              Dica: deixe vazio que eu gero automaticamente a partir do nome.
+            </div>
+          </label>
+
+          <div className="formActions">
+            <button type="button" className="btn btn--ghost" onClick={() => setOpenCreate(false)} disabled={creating}>
+              Cancelar
+            </button>
+            <button type="submit" className="btn btn--primary" disabled={creating}>
+              {creating ? "Criando..." : "Criar restaurante"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {toast && (
+        <div className={`toast toast--${toast.type}`}>
+          <div className="toastDot" />
+          <div className="toastMsg">{toast.message}</div>
+        </div>
+      )}
+    </div>
+  );
+}
